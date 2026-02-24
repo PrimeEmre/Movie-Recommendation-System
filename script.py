@@ -1,8 +1,10 @@
-from operator import index
+import requests
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
+# Setting the API
+API_KEY = "your api"
+BASE_URL = "your base url"
 # Setting the data
 movies = pd.read_csv("movie.csv")
 print(f"movies loaded: {movies.shape}")
@@ -18,30 +20,47 @@ trfidf_martix = trfidf.fit_transform(movies['genres'])
 similarity = cosine_similarity(trfidf_martix, trfidf_martix)
 print("Similarity matrix created!")
 # Building the recommendation
-def recommed(movie_title, num_recommendations=5):
-    indices = pd.Series(movies.index, index=movies['title']).drop_duplicates()
+def search_movie(movie_title):
+    url = f"{BASE_URL}/search/movie"
+    params = {"api_key": API_KEY, "query": movie_title}
+    response = requests.get(url, params=params)
+    results = response.json().get("results", [])
 
-    # Check if movie exists
-    if movie_title not in indices:
-        print(f"Movie '{movie_title}' not found")
+    if not results:
+        print(f"Movie '{movie_title}' not found!")
+        return None
+
+    movie = results[0]
+    print(f"Found: {movie['title']} ({movie.get('release_date', 'N/A')[:4]})")
+    return movie
+
+# Step 2: Get recommendations
+def recommend(movie_title, num_recommendations=5):
+    movie = search_movie(movie_title)
+    if not movie:
         return
 
-    # Get recommendations
-    indx = indices[movie_title]
-    sim_scores = list(enumerate(similarity[indx]))
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-    sim_scores = sim_scores[1:num_recommendations+1]
-    movie_indices = [i[0] for i in sim_scores]
-    recommendations = movies['title'].iloc[movie_indices]
+    movie_id = movie["id"]
+
+    url = f"{BASE_URL}/movie/{movie_id}/recommendations"
+    params = {"api_key": API_KEY}
+    response = requests.get(url, params=params)
+    results = response.json().get("results", [])
+
+    if not results:
+        print(f"No recommendations found for '{movie_title}'")
+        return
 
     print(f"\n Because you liked '{movie_title}', we recommend:")
-    for i, movie in enumerate(recommendations, 1):
-        print(f"  {i}. {movie}")
+    for i, m in enumerate(results[:num_recommendations], 1):
+        year = m.get("release_date", "N/A")[:4]
+        rating = m.get("vote_average", "N/A")
+        print(f"  {i}. {m['title']} ({year}) ⭐ {rating}/10")
 
-
-# Test
-recommed("Toy Story (1995)")
-recommed("James Bond")
-recommed("GoodFellas (1990)")
-recommed("Jumanji (1995)")
+# Step 3: Test it!
+recommend("Toy Story")
+recommend("The Dark Knight")
+recommend("Parasite")
+recommend("Inception")
+recommend("Recep Ivedik ")
 
